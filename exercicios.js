@@ -1,6 +1,7 @@
 // exercicios.js - Lógica de exercícios e questões
 import { usuarioAtivo, atualizarXPStreak, atualizarRanking, atualizarStreak, registrarQuestaoDoDia } from './user.js';
 import { construirCaminho, atualizarProgresso } from './disciplinas.js';
+import { doc, updateDoc } from 'https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js';
 
 let respostaSelecionada = null;
 
@@ -42,7 +43,7 @@ function selecionar(elemento,index){
   respostaSelecionada=index;
 }
 
-function verificar(){
+async function verificar(){
   if(respostaSelecionada===null){
     document.getElementById("feedback").innerText="Escolha uma alternativa.";
     return;
@@ -73,11 +74,13 @@ function verificar(){
     feedback.style.color = "red";
   }
 
-  let usuarios = JSON.parse(localStorage.getItem("usuarios"));
-  let idx = usuarios.findIndex(u=>u.nome===usuarioAtivo.nome);
-  usuarios[idx] = usuarioAtivo;
-  localStorage.setItem("usuarios", JSON.stringify(usuarios));
-  localStorage.setItem("usuarioAtivo", JSON.stringify(usuarioAtivo));
+  try {
+    if(window.db && usuarioAtivo.id) {
+      await updateDoc(doc(window.db, 'usuarios', usuarioAtivo.id), usuarioAtivo);
+    }
+  } catch(error) {
+    console.error("Erro ao atualizar progresso:", error);
+  }
 
   document.getElementById("explicacao").innerText = questao.explicacao || "";
   document.getElementById("voltarAssuntosBtn").classList.remove("hidden");
@@ -88,7 +91,7 @@ function verificar(){
   }
   atualizarProgresso();
   atualizarXPStreak();
-  atualizarRanking();
+  await atualizarRanking();
 }
 
 function proximaQuestao(){

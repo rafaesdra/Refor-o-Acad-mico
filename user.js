@@ -1,46 +1,76 @@
 // user.js - Gerenciamento de usuários, login e progresso
+import { collection, doc, setDoc, getDoc, getDocs, updateDoc, query, orderBy } from 'https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js';
 let usuarioAtivo = null;
 let metaDiaria = 3;
 
 // === USUÁRIOS / LOGIN ===
-function carregarUsuarios(){
-  if(!localStorage.getItem("usuarios")) localStorage.setItem("usuarios", JSON.stringify([]));
+async function carregarUsuarios(){
+  // Not needed for Firestore
 }
 
-function criarUsuario(){
-  let nome = document.getElementById("username").value.trim();
-  let senha = document.getElementById("password").value.trim();
-  if(!nome || !senha){ document.getElementById("loginMsg").innerText="Preencha nome e senha."; return; }
+async function criarUsuario(){
+  try {
+    let nome = document.getElementById("username").value.trim();
+    let senha = document.getElementById("password").value.trim();
+    if(!nome || !senha){ document.getElementById("loginMsg").innerText="Preencha nome e senha."; return; }
 
-  let usuarios = JSON.parse(localStorage.getItem("usuarios"));
-  if(usuarios.find(u=>u.nome===nome)){ document.getElementById("loginMsg").innerText="Usuário já existe."; return; }
+    if(!window.db) { document.getElementById("loginMsg").innerText="Erro: Firebase não inicializado."; return; }
+    
+    const userRef = doc(window.db, 'usuarios', nome);
+    const userSnap = await getDoc(userRef);
+    if(userSnap.exists()){
+      document.getElementById("loginMsg").innerText="Usuário já existe."; return;
+    }
 
-  usuarios.push({nome, senha, xp:0, streak:0, ultimaData:null, progresso:{}});
-  localStorage.setItem("usuarios", JSON.stringify(usuarios));
-  document.getElementById("loginMsg").innerText="Usuário criado! Agora faça login.";
+    const newUser = {nome, senha, xp:0, streak:0, ultimaData:null, progresso:{}};
+    await setDoc(userRef, newUser);
+    document.getElementById("loginMsg").innerText="Usuário criado! Agora faça login.";
+  } catch(error) {
+    console.error("Erro ao criar usuário:", error);
+    document.getElementById("loginMsg").innerText="Erro: " + error.message;
+  }
 }
 
-function loginUsuario(){
-  let nome = document.getElementById("username").value.trim();
-  let senha = document.getElementById("password").value.trim();
-  let usuarios = JSON.parse(localStorage.getItem("usuarios"));
-  let user = usuarios.find(u=>u.nome===nome && u.senha===senha);
+async function loginUsuario(){
+  try {
+    let nome = document.getElementById("username").value.trim();
+    let senha = document.getElementById("password").value.trim();
+    
+    if(!window.db) { document.getElementById("loginMsg").innerText="Erro: Firebase não inicializado."; return; }
+    
+    const userRef = doc(window.db, 'usuarios', nome);
+    const userSnap = await getDoc(userRef);
 
-  if(!user){ document.getElementById("loginMsg").innerText="Usuário ou senha incorretos."; return; }
-  usuarioAtivo = user;
-  localStorage.setItem("usuarioAtivo", JSON.stringify(usuarioAtivo));
-  mostrarDashboard();
+    if(!userSnap.exists() || userSnap.data().senha !== senha){
+      document.getElementById("loginMsg").innerText="Usuário ou senha incorretos."; return;
+    }
+    usuarioAtivo = {id: nome, ...userSnap.data()};
+    await setDoc(doc(window.db, 'ativos', 'current'), {usuario: nome});
+    mostrarDashboard();
+  } catch(error) {
+    console.error("Erro ao fazer login:", error);
+    document.getElementById("loginMsg").innerText="Erro: " + error.message;
+  }
 }
 
-function logout(){ localStorage.removeItem("usuarioAtivo"); location.reload(); }
+async function logout(){
+  try {
+    if(window.db) {
+      await setDoc(doc(window.db, 'ativos', 'current'), {usuario: null});
+    }
+  } catch(e) {
+    console.error("Erro ao fazer logout:", e);
+  }
+  location.reload();
+}
 
 // === DASHBOARD ===
-function mostrarDashboard(){
+async function mostrarDashboard(){
   document.getElementById("loginCard").style.display = "none";
   document.getElementById("dashboard").style.display = "block";
   document.getElementById("usuarioAtivo").innerText = usuarioAtivo.nome;
   atualizarXPStreak();
-  atualizarRanking();
+  await atualizarRanking();
   
   // Carregar disciplinas quando o dashboard é mostrado
   if(window.carregarDisciplinas){
@@ -55,16 +85,22 @@ function atualizarXPStreak(){
 }
 
 // Atualiza ranking histórico
-function atualizarRanking(){
-  let usuarios = JSON.parse(localStorage.getItem("usuarios"));
-  usuarios.sort((a,b)=>b.xp - a.xp);
-  let ol = document.getElementById("rankingHistorico");
-  ol.innerHTML = "";
-  usuarios.forEach(u=>{
-    let li = document.createElement("li");
-    li.innerText = `${u.nome} - ${u.xp} XP`;
-    ol.appendChild(li);
-  });
+async function atualizarRanking(){
+  try {
+    if(!window.db) return;
+    const q = query(collection(window.db, 'usuarios'), orderBy('xp', 'desc'));
+    const querySnapshot = await getDocs(q);
+    let ol = document.getElementById("rankingHistorico");
+    ol.innerHTML = "";
+    querySnapshot.forEach((docSnap) => {
+      let data = docSnap.data();
+      let li = document.createElement("li");
+      li.innerText = `${data.nome} - ${data.xp} XP`;
+      ol.appendChild(li);
+    });
+  } catch(error) {
+    console.error("Erro ao atualizar ranking:", error);
+  }
 }
 
 // === STREAK ===
