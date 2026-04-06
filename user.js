@@ -1,5 +1,6 @@
 // user.js - Gerenciamento de usuários, login e progresso
 import { collection, doc, setDoc, getDoc, getDocs, updateDoc, query, orderBy } from 'https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js';
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/12.11.0/firebase-auth.js';
 let usuarioAtivo = null;
 let metaDiaria = 3;
 
@@ -10,57 +11,95 @@ async function carregarUsuarios(){
 
 async function criarUsuario(){
   try {
-    let nome = document.getElementById("username").value.trim();
+    let displayName = document.getElementById("displayName").value.trim();
+    let email = document.getElementById("username").value.trim();
     let senha = document.getElementById("password").value.trim();
-    if(!nome || !senha){ document.getElementById("loginMsg").innerText="Preencha nome e senha."; return; }
-
-    if(!window.db) { document.getElementById("loginMsg").innerText="Erro: Firebase não inicializado."; return; }
-    
-    const userRef = doc(window.db, 'usuarios', nome);
-    const userSnap = await getDoc(userRef);
-    if(userSnap.exists()){
-      document.getElementById("loginMsg").innerText="Usuário já existe."; return;
+    if(!displayName || !email || !senha){ 
+      document.getElementById("loginMsg").innerText="Preencha nome, email e senha."; 
+      return; 
     }
 
-    const newUser = {nome, senha, xp:0, streak:0, ultimaData:null, progresso:{}};
-    await setDoc(userRef, newUser);
+    if(!window.auth) { document.getElementById("loginMsg").innerText="Erro: Firebase Auth não inicializado."; return; }
+
+    // Criar usuário no Firebase Auth
+    const userCredential = await createUserWithEmailAndPassword(window.auth, email, senha);
+    const user = userCredential.user;
+
+    // Criar documento no Firestore com dados adicionais
+    const userData = {
+      email: email,
+      nome: displayName, // Usar o nome fornecido pelo usuário
+      xp: 0,
+      streak: 0,
+      ultimaData: null,
+      progresso: {}
+    };
+    await setDoc(doc(window.db, 'usuarios', user.uid), userData);
+
     document.getElementById("loginMsg").innerText="Usuário criado! Agora faça login.";
+    // Voltar para tela de login após criar conta
+    mostrarLogin();
   } catch(error) {
     console.error("Erro ao criar usuário:", error);
-    document.getElementById("loginMsg").innerText="Erro: " + error.message;
+    let msg = "Erro ao criar usuário.";
+    if(error.code === 'auth/email-already-in-use') {
+      msg = "Este email já está cadastrado.";
+    } else if(error.code === 'auth/weak-password') {
+      msg = "A senha deve ter pelo menos 6 caracteres.";
+    } else if(error.code === 'auth/invalid-email') {
+      msg = "Email inválido.";
+    }
+    document.getElementById("loginMsg").innerText = msg;
   }
 }
 
 async function loginUsuario(){
   try {
-    let nome = document.getElementById("username").value.trim();
+    let email = document.getElementById("username").value.trim();
     let senha = document.getElementById("password").value.trim();
-    
-    if(!window.db) { document.getElementById("loginMsg").innerText="Erro: Firebase não inicializado."; return; }
-    
-    const userRef = doc(window.db, 'usuarios', nome);
+
+    if(!window.auth) { document.getElementById("loginMsg").innerText="Erro: Firebase Auth não inicializado."; return; }
+
+    // Fazer login com Firebase Auth
+    const userCredential = await signInWithEmailAndPassword(window.auth, email, senha);
+    const user = userCredential.user;
+
+    // Carregar dados do usuário do Firestore
+    const userRef = doc(window.db, 'usuarios', user.uid);
     const userSnap = await getDoc(userRef);
 
-    if(!userSnap.exists() || userSnap.data().senha !== senha){
-      document.getElementById("loginMsg").innerText="Usuário ou senha incorretos."; return;
+    if(!userSnap.exists()){
+      document.getElementById("loginMsg").innerText="Dados do usuário não encontrados. Tente criar uma nova conta.";
+      return;
     }
-    usuarioAtivo = {id: nome, ...userSnap.data()};
+
+    usuarioAtivo = {id: user.uid, ...userSnap.data()};
     localStorage.setItem("usuarioAtivo", JSON.stringify(usuarioAtivo));
     mostrarDashboard();
   } catch(error) {
     console.error("Erro ao fazer login:", error);
-    document.getElementById("loginMsg").innerText="Erro: " + error.message;
+    let msg = "Erro ao fazer login.";
+    if(error.code === 'auth/user-not-found') {
+      msg = "Usuário não encontrado.";
+    } else if(error.code === 'auth/wrong-password') {
+      msg = "Senha incorreta.";
+    } else if(error.code === 'auth/invalid-email') {
+      msg = "Email inválido.";
+    }
+    document.getElementById("loginMsg").innerText = msg;
   }
 }
 
 async function logout(){
   try {
-    if(window.db) {
-      await setDoc(doc(window.db, 'ativos', 'current'), {usuario: null});
+    if(window.auth) {
+      await signOut(window.auth);
     }
   } catch(e) {
     console.error("Erro ao fazer logout:", e);
   }
+  usuarioAtivo = null;
+  localStorage.removeItem("usuarioAtivo");
   location.reload();
 }
 
@@ -174,9 +213,31 @@ function gerarCalendario(){
 
 export { usuarioAtivo, metaDiaria, carregarUsuarios, criarUsuario, loginUsuario, logout, mostrarDashboard, atualizarXPStreak, atualizarRanking, atualizarStreak, registrarQuestaoDoDia, atualizarMeta, salvarMeta, mostrarMeta, gerarCalendario };
 
-// Função para definir usuarioAtivo (usada pelo main.js)
-export function definirUsuarioAtivo(user) {
-  usuarioAtivo = user;
+// === CONTROLE DE FORMULÁRIO ===
+function mostrarCriarConta(){
+  document.getElementById("loginFields").classList.add("hidden");
+  document.getElementById("createFields").classList.remove("hidden");
+  document.getElementById("btnVoltarLogin").classList.remove("hidden");
+  document.getElementById("loginMsg").innerText = "";
+  
+  // Alterar texto do botão principal
+  const btnCriar = document.querySelector('button[onclick="mostrarCriarConta()"]');
+  btnCriar.innerHTML = '<i class="fas fa-user-plus mr-2"></i>Criar Conta';
+  btnCriar.setAttribute("onclick", "criarUsuario()");
+}
+
+function mostrarLogin(){
+  document.getElementById("loginFields").classList.remove("hidden");
+  document.getElementById("createFields").classList.add("hidden");
+  document.getElementById("btnVoltarLogin").classList.add("hidden");
+  document.getElementById("loginMsg").innerText = "";
+  
+  // Resetar botão
+  const btnCriar = document.querySelector('button[onclick="criarUsuario()"]');
+  if(btnCriar) {
+    btnCriar.innerHTML = '<i class="fas fa-user-plus mr-2"></i>Criar Usuário';
+    btnCriar.setAttribute("onclick", "mostrarCriarConta()");
+  }
 }
 
 // Tornar funções globais para onclick no HTML
@@ -184,5 +245,7 @@ window.criarUsuario = criarUsuario;
 window.loginUsuario = loginUsuario;
 window.logout = logout;
 window.salvarMeta = salvarMeta;
+window.mostrarCriarConta = mostrarCriarConta;
+window.mostrarLogin = mostrarLogin;
 window.logout = logout;
 window.salvarMeta = salvarMeta;

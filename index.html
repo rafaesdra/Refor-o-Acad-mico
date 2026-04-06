@@ -34,10 +34,10 @@ tailwind.config = {
 }
 </script>
 <script type="module">
-  // Import the functions you need from the SDKs you need
   import { initializeApp } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-app.js";
   import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-analytics.js";
   import { getFirestore } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
+  import { getAuth } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-auth.js";
   // TODO: Add SDKs for Firebase products that you want to use
   // https://firebase.google.com/docs/web/setup#available-libraries
 
@@ -57,9 +57,11 @@ tailwind.config = {
   const app = initializeApp(firebaseConfig);
   const analytics = getAnalytics(app);
   const db = getFirestore(app);
+  const auth = getAuth(app);
 
-  // Make db global for other modules
+  // Make db and auth global for other modules
   window.db = db;
+  window.auth = auth;
 </script>
 </head>
 
@@ -75,16 +77,27 @@ tailwind.config = {
     </div>
 
     <div class="space-y-4">
-      <input id="username" name="username" type="text" autocomplete="username" placeholder="Nome" class="w-full p-4 rounded-xl border-2 border-gray-200 focus:border-raio focus:outline-none transition-colors">
-      <input id="password" name="password" type="password" autocomplete="current-password" placeholder="Senha" class="w-full p-4 rounded-xl border-2 border-gray-200 focus:border-raio focus:outline-none transition-colors">
+      <!-- Campos para login -->
+      <div id="loginFields">
+        <input id="username" name="username" type="email" autocomplete="email" placeholder="Email" class="w-full p-4 rounded-xl border-2 border-gray-200 focus:border-raio focus:outline-none transition-colors">
+        <input id="password" name="password" type="password" autocomplete="current-password" placeholder="Senha" class="w-full p-4 rounded-xl border-2 border-gray-200 focus:border-raio focus:outline-none transition-colors">
+      </div>
+
+      <!-- Campo adicional para criar conta -->
+      <div id="createFields" class="hidden">
+        <input id="displayName" name="displayName" type="text" autocomplete="name" placeholder="Nome de usuário" class="w-full p-4 rounded-xl border-2 border-gray-200 focus:border-raio focus:outline-none transition-colors">
+      </div>
     </div>
 
     <div class="mt-6 space-y-3">
       <button onclick="loginUsuario()" class="w-full bg-ufcg hover:bg-blue-800 text-white p-4 rounded-xl font-semibold transition-all transform hover:scale-105 shadow-lg">
         <i class="fas fa-sign-in-alt mr-2"></i>Entrar
       </button>
-      <button onclick="criarUsuario()" class="w-full bg-raio hover:bg-yellow-400 text-black p-4 rounded-xl font-semibold transition-all transform hover:scale-105 shadow-lg">
+      <button onclick="mostrarCriarConta()" class="w-full bg-raio hover:bg-yellow-400 text-black p-4 rounded-xl font-semibold transition-all transform hover:scale-105 shadow-lg">
         <i class="fas fa-user-plus mr-2"></i>Criar Usuário
+      </button>
+      <button id="btnVoltarLogin" onclick="mostrarLogin()" class="hidden w-full bg-gray-500 hover:bg-gray-600 text-white p-4 rounded-xl font-semibold transition-all transform hover:scale-105 shadow-lg">
+        <i class="fas fa-arrow-left mr-2"></i>Voltar ao Login
       </button>
     </div>
     <p id="loginMsg" class="text-center text-red-500 mt-4 font-medium"></p>
