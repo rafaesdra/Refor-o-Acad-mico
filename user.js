@@ -12,23 +12,45 @@ async function carregarUsuarios(){
 async function criarUsuario(){
   try {
     let displayName = document.getElementById("displayName").value.trim();
-    let email = document.getElementById("username").value.trim();
+    let email = document.getElementById("userEmail").value.trim();
     let senha = document.getElementById("password").value.trim();
-    if(!displayName || !email || !senha){ 
-      document.getElementById("loginMsg").innerText="Preencha nome, email e senha."; 
+    let confirmSenha = document.getElementById("confirmPassword").value.trim();
+    
+    if(!displayName || !email || !senha || !confirmSenha){ 
+      document.getElementById("loginMsg").innerText="Preencha nome, email, senha e confirmação de senha."; 
       return; 
+    }
+    if(senha !== confirmSenha) {
+      document.getElementById("loginMsg").innerText="As senhas não coincidem.";
+      return;
+    }
+
+    if(displayName.length < 3){
+      document.getElementById("loginMsg").innerText="Nome de usuário deve ter pelo menos 3 caracteres.";
+      return;
     }
 
     if(!window.auth) { document.getElementById("loginMsg").innerText="Erro: Firebase Auth não inicializado."; return; }
+
+    // Verificar se nome de usuário já existe (verificação extra)
+    const usernameRef = doc(window.db, 'usernames', displayName);
+    const usernameSnap = await getDoc(usernameRef);
+    if(usernameSnap.exists()){
+      document.getElementById("loginMsg").innerText="Este nome de usuário já está em uso.";
+      return;
+    }
 
     // Criar usuário no Firebase Auth
     const userCredential = await createUserWithEmailAndPassword(window.auth, email, senha);
     const user = userCredential.user;
 
+    // Salvar mapeamento nome de usuário -> email
+    await setDoc(usernameRef, { email: email, uid: user.uid });
+
     // Criar documento no Firestore com dados adicionais
     const userData = {
       email: email,
-      nome: displayName, // Usar o nome fornecido pelo usuário
+      nome: displayName,
       xp: 0,
       streak: 0,
       ultimaData: null,
@@ -55,12 +77,28 @@ async function criarUsuario(){
 
 async function loginUsuario(){
   try {
-    let email = document.getElementById("username").value.trim();
+    let username = document.getElementById("username").value.trim();
     let senha = document.getElementById("password").value.trim();
+
+    if(!username || !senha) {
+      document.getElementById("loginMsg").innerText="Preencha nome de usuário e senha.";
+      return;
+    }
 
     if(!window.auth) { document.getElementById("loginMsg").innerText="Erro: Firebase Auth não inicializado."; return; }
 
-    // Fazer login com Firebase Auth
+    // Buscar email pelo nome de usuário
+    const usernameRef = doc(window.db, 'usernames', username);
+    const usernameSnap = await getDoc(usernameRef);
+
+    if(!usernameSnap.exists()){
+      document.getElementById("loginMsg").innerText="Nome de usuário não encontrado.";
+      return;
+    }
+
+    const email = usernameSnap.data().email;
+
+    // Fazer login com Firebase Auth usando o email encontrado
     const userCredential = await signInWithEmailAndPassword(window.auth, email, senha);
     const user = userCredential.user;
 
@@ -189,6 +227,15 @@ function salvarMeta(){
 }
 function mostrarMeta(){ document.getElementById("metaAtual").innerText = ""; }
 
+function definirUsuarioAtivo(usuario) {
+  usuarioAtivo = usuario;
+  if (usuarioAtivo) {
+    localStorage.setItem("usuarioAtivo", JSON.stringify(usuarioAtivo));
+  } else {
+    localStorage.removeItem("usuarioAtivo");
+  }
+}
+
 // === CALENDÁRIO 2026 ===
 function gerarCalendario(){
   const calendario = document.getElementById("calendario2026");
@@ -211,14 +258,55 @@ function gerarCalendario(){
   }
 }
 
-export { usuarioAtivo, metaDiaria, carregarUsuarios, criarUsuario, loginUsuario, logout, mostrarDashboard, atualizarXPStreak, atualizarRanking, atualizarStreak, registrarQuestaoDoDia, atualizarMeta, salvarMeta, mostrarMeta, gerarCalendario };
+export { usuarioAtivo, metaDiaria, carregarUsuarios, criarUsuario, loginUsuario, logout, mostrarDashboard, atualizarXPStreak, atualizarRanking, atualizarStreak, registrarQuestaoDoDia, atualizarMeta, salvarMeta, mostrarMeta, gerarCalendario, definirUsuarioAtivo };
 
 // === CONTROLE DE FORMULÁRIO ===
+async function verificarNomeUsuario(){
+  const displayName = document.getElementById("displayName").value.trim();
+  const statusDiv = document.getElementById("usernameStatus");
+  
+  if(!displayName){
+    statusDiv.className = "text-sm mt-1 hidden";
+    statusDiv.innerText = "";
+    return;
+  }
+
+  if(displayName.length < 3){
+    statusDiv.className = "text-sm mt-1 text-orange-600";
+    statusDiv.innerText = "Nome deve ter pelo menos 3 caracteres";
+    return;
+  }
+
+  try {
+    const usernameRef = doc(window.db, 'usernames', displayName);
+    const usernameSnap = await getDoc(usernameRef);
+    
+    if(usernameSnap.exists()){
+      statusDiv.className = "text-sm mt-1 text-red-600";
+      statusDiv.innerText = "❌ Este nome já está em uso";
+    } else {
+      statusDiv.className = "text-sm mt-1 text-green-600";
+      statusDiv.innerText = "✅ Nome disponível";
+    }
+  } catch(error) {
+    console.error("Erro ao verificar nome:", error);
+    statusDiv.className = "text-sm mt-1 text-gray-500";
+    statusDiv.innerText = "Verificando...";
+  }
+}
 function mostrarCriarConta(){
   document.getElementById("loginFields").classList.add("hidden");
   document.getElementById("createFields").classList.remove("hidden");
+  document.getElementById("confirmPasswordField").classList.remove("hidden");
   document.getElementById("btnVoltarLogin").classList.remove("hidden");
   document.getElementById("loginMsg").innerText = "";
+  
+  // Limpar campos
+  document.getElementById("username").value = "";
+  document.getElementById("password").value = "";
+  document.getElementById("displayName").value = "";
+  document.getElementById("userEmail").value = "";
+  document.getElementById("confirmPassword").value = "";
   
   // Alterar texto do botão principal
   const btnCriar = document.querySelector('button[onclick="mostrarCriarConta()"]');
@@ -229,8 +317,16 @@ function mostrarCriarConta(){
 function mostrarLogin(){
   document.getElementById("loginFields").classList.remove("hidden");
   document.getElementById("createFields").classList.add("hidden");
+  document.getElementById("confirmPasswordField").classList.add("hidden");
   document.getElementById("btnVoltarLogin").classList.add("hidden");
   document.getElementById("loginMsg").innerText = "";
+  
+  // Limpar campos
+  document.getElementById("username").value = "";
+  document.getElementById("password").value = "";
+  document.getElementById("displayName").value = "";
+  document.getElementById("userEmail").value = "";
+  document.getElementById("confirmPassword").value = "";
   
   // Resetar botão
   const btnCriar = document.querySelector('button[onclick="criarUsuario()"]');
@@ -247,5 +343,6 @@ window.logout = logout;
 window.salvarMeta = salvarMeta;
 window.mostrarCriarConta = mostrarCriarConta;
 window.mostrarLogin = mostrarLogin;
+window.verificarNomeUsuario = verificarNomeUsuario;
 window.logout = logout;
 window.salvarMeta = salvarMeta;
