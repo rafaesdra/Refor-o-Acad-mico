@@ -80,7 +80,6 @@ tailwind.config = {
       <!-- Campos para login -->
       <div id="loginFields">
         <input id="username" name="username" type="text" autocomplete="username" placeholder="Nome de usuário" class="w-full p-4 rounded-xl border-2 border-gray-200 focus:border-raio focus:outline-none transition-colors">
-        <input id="password" name="password" type="password" autocomplete="current-password" placeholder="Senha" class="w-full p-4 rounded-xl border-2 border-gray-200 focus:border-raio focus:outline-none transition-colors">
       </div>
 
       <!-- Campo adicional para criar conta -->
@@ -88,6 +87,14 @@ tailwind.config = {
         <input id="displayName" name="displayName" type="text" autocomplete="name" placeholder="Nome de usuário" oninput="verificarNomeUsuario()" class="w-full p-4 rounded-xl border-2 border-gray-200 focus:border-raio focus:outline-none transition-colors">
         <div id="usernameStatus" class="text-sm mt-1 hidden"></div>
         <input id="userEmail" name="userEmail" type="email" autocomplete="email" placeholder="Email" class="w-full p-4 rounded-xl border-2 border-gray-200 focus:border-raio focus:outline-none transition-colors">
+      </div>
+
+      <!-- Campo de senha compartilhado -->
+      <div id="passwordField">
+        <input id="password" name="password" type="password" autocomplete="current-password" placeholder="Senha" class="w-full p-4 rounded-xl border-2 border-gray-200 focus:border-raio focus:outline-none transition-colors">
+      </div>
+      <div id="confirmPasswordField" class="hidden">
+        <input id="confirmPassword" name="confirmPassword" type="password" autocomplete="new-password" placeholder="Confirmar senha" class="w-full p-4 rounded-xl border-2 border-gray-200 focus:border-raio focus:outline-none transition-colors">
       </div>
     </div>
 
