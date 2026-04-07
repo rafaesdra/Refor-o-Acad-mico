@@ -23,9 +23,13 @@ function renderQuestao(){
     opcoesDiv.appendChild(div);
   });
 
+  questao.attempts = questao.attempts || 0;
   respostaSelecionada = null;
-  document.getElementById("feedback").innerText = "";
+  const feedbackEl = document.getElementById("feedback");
+  feedbackEl.innerText = "";
+  feedbackEl.style.whiteSpace = "pre-wrap";
   document.getElementById("explicacao").innerText = "";
+  document.getElementById("confirmBtn").disabled = false;
   document.getElementById("proximaQuestaoBtn").classList.add("hidden");
   document.getElementById("voltarAssuntosBtn").classList.add("hidden");
 }
@@ -58,21 +62,49 @@ async function verificar(){
   let selecionada = questao.alternativas[respostaSelecionada];
   let feedback = document.getElementById("feedback");
   feedback.innerText = "";
+
+  const disciplinaAtual = window.disciplinaAtual || "";
+  usuarioAtivo.progresso = usuarioAtivo.progresso || {};
+  usuarioAtivo.questoesRespondidas = usuarioAtivo.questoesRespondidas || {};
+  const questaoId = `${disciplinaAtual}:${questao.pergunta}`;
+  const registro = usuarioAtivo.questoesRespondidas[questaoId] || { tentativas: 0, ganhouXp: false, pontuacao: 0 };
+  const maxTentativas = 4;
+
   if(selecionada === correta){
-    feedback.innerText = "Resposta correta ✅";
-    feedback.style.color = "green";
-
-    registrarQuestaoDoDia();
-
-    const disciplinaAtual = window.disciplinaAtual || "";
-    usuarioAtivo.progresso[disciplinaAtual] = (usuarioAtivo.progresso[disciplinaAtual] || 0) + 1;
-    usuarioAtivo.xp += 10;
-    atualizarStreak();
-
+    if(!registro.ganhouXp){
+      registro.tentativas += 1;
+      let gained = 0;
+      if(registro.tentativas === 1) gained = 10;
+      else if(registro.tentativas === 2) gained = 7;
+      else if(registro.tentativas === 3) gained = 3;
+      else gained = 0;
+      usuarioAtivo.xp += gained;
+      registro.pontuacao = gained;
+      registro.ganhouXp = true;
+      usuarioAtivo.progresso[disciplinaAtual] = (usuarioAtivo.progresso[disciplinaAtual] || 0) + 1;
+      atualizarStreak();
+      feedback.innerText = gained > 0 ? `Resposta correta ✅ +${gained} XP` : "Resposta correta ✅, mas sem XP adicional.";
+      feedback.style.color = "green";
+    } else {
+      feedback.innerText = "Resposta correta ✅ mas você já ganhou XP nesta questão.";
+      feedback.style.color = "orange";
+    }
+    document.getElementById("confirmBtn").disabled = true;
   } else {
-    feedback.innerText = `Resposta incorreta ❌ (Resposta correta: ${correta})`;
+    if(!registro.ganhouXp){
+      registro.tentativas = Math.min(registro.tentativas + 1, maxTentativas);
+      let nextScore = 0;
+      if(registro.tentativas === 1) nextScore = 7;
+      else if(registro.tentativas === 2) nextScore = 3;
+      else nextScore = 0;
+      feedback.innerText = `Resposta incorreta ❌ (Resposta correta: ${correta})\nPróxima tentativa vale ${nextScore} XP.`;
+    } else {
+      feedback.innerText = `Resposta incorreta ❌ (Resposta correta: ${correta})`;
+    }
     feedback.style.color = "red";
   }
+
+  usuarioAtivo.questoesRespondidas[questaoId] = registro;
 
   try {
     if(window.db && usuarioAtivo.id) {
